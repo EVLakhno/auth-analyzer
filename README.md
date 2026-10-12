@@ -213,6 +213,14 @@ To avoid this, a Kerberos session sends its repeated request over a **fresh, ded
 
 If you still see every session answered as the same user, make sure this option is enabled and that Burp Platform Authentication is not forcing credentials onto the target host.
 
+### NTLM
+If the target offers `WWW-Authenticate: NTLM`, set **Authentication scheme** to `NTLM` in the Kerberos settings. Auth Analyzer then performs a full per-request NTLMv2 handshake (Type 1 -> 401 / Type 2 -> Type 3) for the session's user over a single dedicated connection and uses the resulting response. Provide:
+
+* **Username** and **Password** - the low privileged user. The username may be given as `user`, `DOMAIN\user` or `user@domain`.
+* **Domain (NTLM)** - the NetBIOS or DNS domain (e.g. `EXAMPLE`), unless already included in the username.
+
+NTLM does not need a JDK / krb5 setup and is always sent over a fresh connection (same reasoning as per-connection Negotiate above). The NTLMv2 response includes a Message Integrity Code (MIC). Channel binding (EPA) is not implemented, so a target that strictly enforces Extended Protection for Authentication over TLS may reject NTLM; use Kerberos there.
+
 ### :warning: Run Burp on a full JDK
 The JRE bundled with Burp Suite (2.x and later) has parts of the Kerberos stack removed, so Kerberos token minting will fail there. Start Burp on a full JDK instead, e.g.:
 

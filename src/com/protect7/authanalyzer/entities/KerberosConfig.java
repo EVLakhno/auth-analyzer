@@ -20,7 +20,15 @@ public class KerberosConfig {
 		PASSWORD, CCACHE, KEYTAB
 	}
 
+	/** Authentication scheme used for the repeated request. */
+	public enum AuthScheme {
+		KERBEROS, NTLM
+	}
+
 	private boolean enabled = false;
+	private AuthScheme authScheme = AuthScheme.KERBEROS;
+	// NetBIOS or DNS domain used for NTLM (e.g. EXAMPLE or EXAMPLE.COM). Can also be given as DOMAIN\\user in the username.
+	private String domain = "";
 	private CredentialSource credentialSource = CredentialSource.PASSWORD;
 	// Username / password (credentialSource == PASSWORD). The realm is taken from the domain / krb5 settings.
 	private String username = "";
@@ -60,6 +68,22 @@ public class KerberosConfig {
 
 	public void setEnabled(boolean enabled) {
 		this.enabled = enabled;
+	}
+
+	public AuthScheme getAuthScheme() {
+		return authScheme == null ? AuthScheme.KERBEROS : authScheme;
+	}
+
+	public void setAuthScheme(AuthScheme authScheme) {
+		this.authScheme = authScheme;
+	}
+
+	public String getDomain() {
+		return domain;
+	}
+
+	public void setDomain(String domain) {
+		this.domain = domain;
 	}
 
 	public CredentialSource getCredentialSource() {
@@ -212,6 +236,8 @@ public class KerberosConfig {
 	public KerberosConfig copy() {
 		KerberosConfig copy = new KerberosConfig();
 		copy.enabled = this.enabled;
+		copy.authScheme = this.getAuthScheme();
+		copy.domain = this.domain;
 		copy.credentialSource = this.getCredentialSource();
 		copy.username = this.username;
 		copy.password = this.password;

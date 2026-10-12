@@ -12,6 +12,7 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.List;
 import com.protect7.authanalyzer.entities.AnalyzerRequestResponse;
+import com.protect7.authanalyzer.entities.KerberosConfig;
 import com.protect7.authanalyzer.entities.OriginalRequestResponse;
 import com.protect7.authanalyzer.entities.Session;
 import com.protect7.authanalyzer.entities.SimpleHttpRequestResponse;
@@ -24,8 +25,10 @@ import com.protect7.authanalyzer.util.ExtractionHelper;
 import com.protect7.authanalyzer.util.GenericHelper;
 import com.protect7.authanalyzer.util.Globals;
 import com.protect7.authanalyzer.util.RequestModifHelper;
+import java.net.InetAddress;
 import burp.BurpExtender;
 import burp.IHttpRequestResponse;
+import burp.IHttpService;
 import burp.IRequestInfo;
 import burp.IResponseInfo;
 
@@ -79,33 +82,40 @@ public class RequestController {
 							modifiedRequestInfo.getBodyOffset(), modifiedRequest.length);
 
 					List<String> modifiedHeaders = RequestModifHelper.getModifiedHeaders(modifiedRequestInfo.getHeaders(), session);
-					// Mint and inject a fresh Kerberos Negotiate token if the session is a Kerberos session.
-					RequestModifHelper.applyKerberosAuthorization(modifiedHeaders, session, originalRequestResponse.getHttpService());
 
-					boolean kerberosDirect = session.getKerberosConfig() != null
-							&& session.getKerberosConfig().isEnabled()
-							&& session.getKerberosConfig().isDirectConnection();
+					KerberosConfig kerberosConfig = session.getKerberosConfig();
+					boolean kerberosEnabled = kerberosConfig != null && kerberosConfig.isEnabled();
 
 					IHttpRequestResponse sessionRequestResponse;
-					if (kerberosDirect) {
-						// Force a fresh connection so per-connection Negotiate (IIS / Windows Integrated Auth)
-						// is not masked by a pooled connection already authenticated as another identity
-						// (e.g. Burp Platform Authentication).
-						RequestModifHelper.setConnectionClose(modifiedHeaders);
-						byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
-						byte[] response = null;
-						try {
-							response = DirectHttpClient.send(originalRequestResponse.getHttpService(), message, 30000);
-						} catch (Exception e) {
-							BurpExtender.callbacks.printError("[" + Globals.EXTENSION_NAME + "] Direct Kerberos request failed for session '"
-									+ session.getName() + "': " + e.getMessage());
-						}
-						sessionRequestResponse = new SimpleHttpRequestResponse(originalRequestResponse.getHttpService(), message, response);
+					if (kerberosEnabled && kerberosConfig.getAuthScheme() == KerberosConfig.AuthScheme.NTLM) {
+						// NTLM: perform the Type1/Type2/Type3 handshake over a single dedicated connection.
+						sessionRequestResponse = performNtlmRequest(session, kerberosConfig, modifiedHeaders,
+								modifiedMessageBody, originalRequestResponse.getHttpService());
 					} else {
-						byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
-						// Perform modified request
-						sessionRequestResponse = BurpExtender.callbacks
-								.makeHttpRequest(originalRequestResponse.getHttpService(), message);
+						// Kerberos / Negotiate: mint and inject a fresh token if enabled.
+						RequestModifHelper.applyKerberosAuthorization(modifiedHeaders, session,
+								originalRequestResponse.getHttpService());
+						boolean kerberosDirect = kerberosEnabled && kerberosConfig.isDirectConnection();
+						if (kerberosDirect) {
+							// Force a fresh connection so per-connection Negotiate (IIS / Windows Integrated Auth)
+							// is not masked by a pooled connection already authenticated as another identity
+							// (e.g. Burp Platform Authentication).
+							RequestModifHelper.setConnectionClose(modifiedHeaders);
+							byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
+							byte[] response = null;
+							try {
+								response = DirectHttpClient.send(originalRequestResponse.getHttpService(), message, 30000);
+							} catch (Exception e) {
+								BurpExtender.callbacks.printError("[" + Globals.EXTENSION_NAME + "] Direct Kerberos request failed for session '"
+										+ session.getName() + "': " + e.getMessage());
+							}
+							sessionRequestResponse = new SimpleHttpRequestResponse(originalRequestResponse.getHttpService(), message, response);
+						} else {
+							byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
+							// Perform modified request
+							sessionRequestResponse = BurpExtender.callbacks
+									.makeHttpRequest(originalRequestResponse.getHttpService(), message);
+						}
 					}
 				
 					// Analyze Response of modified Request
@@ -176,6 +186,44 @@ public class RequestController {
 		}
 	}
 	
+	private IHttpRequestResponse performNtlmRequest(Session session, KerberosConfig config, java.util.List<String> headers,
+			byte[] body, IHttpService httpService) {
+		String user = config.getUsername() == null ? "" : config.getUsername().trim();
+		String domain = config.getDomain() == null ? "" : config.getDomain().trim();
+		// Support DOMAIN\\user and user@domain notations.
+		int backslash = user.indexOf('\\');
+		if (backslash != -1) {
+			if (domain.isEmpty()) {
+				domain = user.substring(0, backslash);
+			}
+			user = user.substring(backslash + 1);
+		} else {
+			int at = user.indexOf('@');
+			if (at != -1) {
+				if (domain.isEmpty()) {
+					domain = user.substring(at + 1);
+				}
+				user = user.substring(0, at);
+			}
+		}
+		String workstation;
+		try {
+			workstation = InetAddress.getLocalHost().getHostName();
+		} catch (Exception e) {
+			workstation = "WORKSTATION";
+		}
+		try {
+			DirectHttpClient.NtlmExchange exchange = DirectHttpClient.sendNtlm(httpService, headers, body, domain, user,
+					config.getPassword(), workstation, 30000);
+			return new SimpleHttpRequestResponse(httpService, exchange.finalRequest, exchange.response);
+		} catch (Exception e) {
+			BurpExtender.callbacks.printError("[" + Globals.EXTENSION_NAME + "] NTLM request failed for session '"
+					+ session.getName() + "': " + e.getMessage());
+			byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(headers, body);
+			return new SimpleHttpRequestResponse(httpService, message, null);
+		}
+	}
+
 	private boolean scopeMatches(URL url, Session session) {
 		URL scopeUrl = session.getScopeUrl();
 		if(scopeUrl != null) {

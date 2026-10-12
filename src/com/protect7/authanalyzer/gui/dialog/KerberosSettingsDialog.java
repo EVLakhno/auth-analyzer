@@ -46,6 +46,9 @@ public class KerberosSettingsDialog extends JDialog {
 
 	private final KerberosConfig config;
 
+	private final JRadioButton kerberosSchemeRadio = new JRadioButton("Kerberos (Negotiate)");
+	private final JRadioButton ntlmSchemeRadio = new JRadioButton("NTLM");
+
 	private final JRadioButton passwordRadio = new JRadioButton("Username / password");
 	private final JRadioButton ccacheRadio = new JRadioButton("Ticket cache (ccache)");
 	private final JRadioButton keytabRadio = new JRadioButton("Keytab");
@@ -53,6 +56,7 @@ public class KerberosSettingsDialog extends JDialog {
 	private final JTextField usernameField = new JTextField(TEXTFIELD_WIDTH);
 	private final JPasswordField passwordField = new JPasswordField(TEXTFIELD_WIDTH);
 	private final JCheckBox savePasswordBox = new JCheckBox("Save password in Burp config");
+	private final JTextField domainField = new JTextField(TEXTFIELD_WIDTH);
 	private final JTextField ccachePathField = new JTextField(TEXTFIELD_WIDTH);
 	private final JTextField keytabPathField = new JTextField(TEXTFIELD_WIDTH);
 	private final JTextField principalField = new JTextField(TEXTFIELD_WIDTH);
@@ -84,6 +88,10 @@ public class KerberosSettingsDialog extends JDialog {
 		contentPanel.setLayout(new GridBagLayout());
 		contentPanel.setBorder(new EmptyBorder(10, 12, 10, 12));
 
+		ButtonGroup schemeGroup = new ButtonGroup();
+		schemeGroup.add(kerberosSchemeRadio);
+		schemeGroup.add(ntlmSchemeRadio);
+
 		ButtonGroup credentialGroup = new ButtonGroup();
 		credentialGroup.add(passwordRadio);
 		credentialGroup.add(ccacheRadio);
@@ -101,13 +109,20 @@ public class KerberosSettingsDialog extends JDialog {
 		c.gridwidth = 1;
 		c.insets = new Insets(2, 2, 2, 8);
 
-		addFullWidth(contentPanel, c, createHintLabel("Each session is one Kerberos client. To test several clients, "
+		addFullWidth(contentPanel, c, createHintLabel("Each session is one client. To test several clients, "
 				+ "create or clone a session per user and set its own credentials here."));
+
+		addSectionLabel(contentPanel, c, "Authentication scheme");
+		addRow(contentPanel, c, kerberosSchemeRadio, ntlmSchemeRadio);
+		addFullWidth(contentPanel, c, createHintLabel("NTLM uses a username/password handshake and is always sent over a fresh connection. "
+				+ "The ticket cache, keytab, service principal, SPNEGO and domain/KDC options below apply to Kerberos only."));
 
 		addSectionLabel(contentPanel, c, "Credential source");
 		addFullWidth(contentPanel, c, passwordRadio);
-		addLabeledField(contentPanel, c, "Username", usernameField, "e.g. lowpriv (realm is taken from the domain settings) or lowpriv@EXAMPLE.COM");
+		addLabeledField(contentPanel, c, "Username", usernameField, "e.g. lowpriv, DOMAIN\\lowpriv or lowpriv@EXAMPLE.COM");
 		addLabeledField(contentPanel, c, "Password", passwordField, null);
+		addLabeledField(contentPanel, c, "Domain (NTLM)", domainField,
+				"NetBIOS or DNS domain for NTLM, e.g. EXAMPLE. Optional if the username is given as DOMAIN\\user.");
 		addFullWidth(contentPanel, c, savePasswordBox);
 		addFullWidth(contentPanel, c, createHintLabel("If unchecked the password is kept in memory only and is not written to the Burp project / config."));
 		addFullWidth(contentPanel, c, ccacheRadio);
@@ -168,6 +183,8 @@ public class KerberosSettingsDialog extends JDialog {
 		loadFromConfig();
 		updateEnabledState();
 
+		kerberosSchemeRadio.addActionListener(e -> updateEnabledState());
+		ntlmSchemeRadio.addActionListener(e -> updateEnabledState());
 		passwordRadio.addActionListener(e -> updateEnabledState());
 		ccacheRadio.addActionListener(e -> updateEnabledState());
 		keytabRadio.addActionListener(e -> updateEnabledState());
@@ -198,6 +215,15 @@ public class KerberosSettingsDialog extends JDialog {
 		c.gridy++;
 		panel.add(label, c);
 		c.gridwidth = 1;
+	}
+
+	private void addRow(JPanel panel, GridBagConstraints c, Component left, Component right) {
+		c.gridwidth = 1;
+		c.gridx = 0;
+		c.gridy++;
+		panel.add(left, c);
+		c.gridx = 1;
+		panel.add(right, c);
 	}
 
 	private void addLabeledField(JPanel panel, GridBagConstraints c, String label, Component field, String hint) {
@@ -233,6 +259,12 @@ public class KerberosSettingsDialog extends JDialog {
 	}
 
 	private void loadFromConfig() {
+		if (config.getAuthScheme() == KerberosConfig.AuthScheme.NTLM) {
+			ntlmSchemeRadio.setSelected(true);
+		} else {
+			kerberosSchemeRadio.setSelected(true);
+		}
+		domainField.setText(nullToEmpty(config.getDomain()));
 		if (config.getCredentialSource() == CredentialSource.KEYTAB) {
 			keytabRadio.setSelected(true);
 		} else if (config.getCredentialSource() == CredentialSource.CCACHE) {
@@ -281,19 +313,26 @@ public class KerberosSettingsDialog extends JDialog {
 			warn("Re-login interval must be a non-negative integer (seconds).");
 			return false;
 		}
-		if (passwordRadio.isSelected() && usernameField.getText().trim().isEmpty()) {
+		boolean ntlm = ntlmSchemeRadio.isSelected();
+		if (ntlm && usernameField.getText().trim().isEmpty()) {
+			warn("A username is required for NTLM authentication.");
+			return false;
+		}
+		if (!ntlm && passwordRadio.isSelected() && usernameField.getText().trim().isEmpty()) {
 			warn("A username is required for username / password authentication.");
 			return false;
 		}
-		if (keytabRadio.isSelected() && principalField.getText().trim().isEmpty()) {
+		if (!ntlm && keytabRadio.isSelected() && principalField.getText().trim().isEmpty()) {
 			warn("A client principal is required when authenticating with a keytab.");
 			return false;
 		}
-		if (fixedSpnRadio.isSelected() && spnField.getText().trim().isEmpty()) {
+		if (!ntlm && fixedSpnRadio.isSelected() && spnField.getText().trim().isEmpty()) {
 			warn("A fixed service principal name must be provided.");
 			return false;
 		}
 
+		target.setAuthScheme(ntlm ? KerberosConfig.AuthScheme.NTLM : KerberosConfig.AuthScheme.KERBEROS);
+		target.setDomain(domainField.getText().trim());
 		if (keytabRadio.isSelected()) {
 			target.setCredentialSource(CredentialSource.KEYTAB);
 		} else if (ccacheRadio.isSelected()) {
@@ -349,13 +388,40 @@ public class KerberosSettingsDialog extends JDialog {
 	}
 
 	private void updateEnabledState() {
-		usernameField.setEnabled(passwordRadio.isSelected());
-		passwordField.setEnabled(passwordRadio.isSelected());
-		savePasswordBox.setEnabled(passwordRadio.isSelected());
-		ccachePathField.setEnabled(ccacheRadio.isSelected());
-		keytabPathField.setEnabled(keytabRadio.isSelected());
-		serviceClassField.setEnabled(deriveSpnRadio.isSelected());
-		spnField.setEnabled(fixedSpnRadio.isSelected());
+		boolean ntlm = ntlmSchemeRadio.isSelected();
+		if (ntlm) {
+			// NTLM needs a cleartext password; Kerberos-only controls do not apply.
+			passwordRadio.setSelected(true);
+			directConnectionBox.setSelected(true);
+		}
+		// Credential source radios (Kerberos only).
+		passwordRadio.setEnabled(!ntlm);
+		ccacheRadio.setEnabled(!ntlm);
+		keytabRadio.setEnabled(!ntlm);
+
+		usernameField.setEnabled(ntlm || passwordRadio.isSelected());
+		passwordField.setEnabled(ntlm || passwordRadio.isSelected());
+		savePasswordBox.setEnabled(ntlm || passwordRadio.isSelected());
+		domainField.setEnabled(ntlm);
+		ccachePathField.setEnabled(!ntlm && ccacheRadio.isSelected());
+		keytabPathField.setEnabled(!ntlm && keytabRadio.isSelected());
+		principalField.setEnabled(!ntlm);
+
+		// Kerberos-only sections.
+		deriveSpnRadio.setEnabled(!ntlm);
+		fixedSpnRadio.setEnabled(!ntlm);
+		serviceClassField.setEnabled(!ntlm && deriveSpnRadio.isSelected());
+		spnField.setEnabled(!ntlm && fixedSpnRadio.isSelected());
+		useSpnegoBox.setEnabled(!ntlm);
+		mutualAuthBox.setEnabled(!ntlm);
+		credDelegBox.setEnabled(!ntlm);
+		realmField.setEnabled(!ntlm);
+		kdcField.setEnabled(!ntlm);
+		krb5ConfField.setEnabled(!ntlm);
+		reloginField.setEnabled(!ntlm);
+		directConnectionBox.setEnabled(!ntlm);
+		// NTLM is validated by running against the target, not by a standalone login.
+		testCredentialsButton.setEnabled(!ntlm);
 	}
 
 	private void warn(String message) {

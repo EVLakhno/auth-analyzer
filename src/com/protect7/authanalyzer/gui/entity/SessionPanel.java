@@ -101,10 +101,9 @@ public class SessionPanel extends JPanel {
 		sessionPanel.add(testCors, c);
 
 		// Kerberos per-request Negotiate session
-		kerberosSession = new HintCheckBox("Kerberos Session", false,
-				"Generate a fresh 'Authorization: Negotiate ...' token per request via Kerberos/GSS. "
-				+ "Use for applications with pure per-request Kerberos Negotiate authentication. "
-				+ "Run Burp on a full JDK (not the bundled JRE).");
+		kerberosSession = new HintCheckBox("Kerberos / NTLM Session", false,
+				"Authenticate each repeated request as a low-privileged user via Kerberos (per-request Negotiate) "
+				+ "or NTLM. Configure under 'Kerberos Settings'. For Kerberos, run Burp on a full JDK (not the bundled JRE).");
 		c.gridx = 0;
 		c.gridy++;
 		c.gridwidth = 2;

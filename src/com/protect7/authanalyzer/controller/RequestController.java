@@ -76,6 +76,8 @@ public class RequestController {
 							modifiedRequestInfo.getBodyOffset(), modifiedRequest.length);
 
 					List<String> modifiedHeaders = RequestModifHelper.getModifiedHeaders(modifiedRequestInfo.getHeaders(), session);
+					// Mint and inject a fresh Kerberos Negotiate token if the session is a Kerberos session.
+					RequestModifHelper.applyKerberosAuthorization(modifiedHeaders, session, originalRequestResponse.getHttpService());
 					byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
 
 					// Perform modified request

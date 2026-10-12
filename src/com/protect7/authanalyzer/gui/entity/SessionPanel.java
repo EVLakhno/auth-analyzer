@@ -20,8 +20,10 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JSeparator;
 import javax.swing.UIManager;
+import com.protect7.authanalyzer.entities.KerberosConfig;
 import com.protect7.authanalyzer.entities.MatchAndReplace;
 import com.protect7.authanalyzer.entities.Token;
+import com.protect7.authanalyzer.gui.dialog.KerberosSettingsDialog;
 import com.protect7.authanalyzer.gui.dialog.MatchAndReplaceDialog;
 import com.protect7.authanalyzer.gui.main.MainPanel;
 import com.protect7.authanalyzer.gui.util.HintCheckBox;
@@ -40,6 +42,9 @@ public class SessionPanel extends JPanel {
 	private final JCheckBox filterRequestsWithSameHeader;
 	private final HintCheckBox restrictToScope;
 	private final HintCheckBox testCors;
+	private final HintCheckBox kerberosSession;
+	private final JButton kerberosSettingsButton;
+	private KerberosConfig kerberosConfig = new KerberosConfig();
 	private final JLabel headerToRemoveLabel = new JLabel("Header(s) to Remove");
 	private final PlaceholderTextArea headersToRemoveText = new PlaceholderTextArea(3, textFieldWidth);
 	private final JLabel restrictToScopeLabel = new JLabel("Restrict to Scope");
@@ -94,7 +99,24 @@ public class SessionPanel extends JPanel {
 		testCors = new HintCheckBox("Test CORS", false, "HTTP Method will be set to OPTIONS");
 		c.gridx = 3;
 		sessionPanel.add(testCors, c);
-		
+
+		// Kerberos per-request Negotiate session
+		kerberosSession = new HintCheckBox("Kerberos Session", false,
+				"Generate a fresh 'Authorization: Negotiate ...' token per request via Kerberos/GSS. "
+				+ "Use for applications with pure per-request Kerberos Negotiate authentication. "
+				+ "Run Burp on a full JDK (not the bundled JRE).");
+		c.gridx = 0;
+		c.gridy++;
+		c.gridwidth = 2;
+		sessionPanel.add(kerberosSession, c);
+		kerberosSettingsButton = new JButton("Kerberos Settings");
+		kerberosSettingsButton.setEnabled(false);
+		kerberosSettingsButton.addActionListener(e -> new KerberosSettingsDialog(this));
+		c.gridx = 2;
+		c.gridwidth = 2;
+		sessionPanel.add(kerberosSettingsButton, c);
+		kerberosSession.addActionListener(e -> updateGui());
+
 		c.gridwidth = 4;
 		c.gridx = 0;
 		c.gridy++;
@@ -165,6 +187,7 @@ public class SessionPanel extends JPanel {
 			restrictToScopeLabel.setVisible(false);
 			restrictToScopeText.setVisible(false);
 		}
+		kerberosSettingsButton.setEnabled(kerberosSession.isSelected());
 		revalidate();
 		mainPanel.updateDividerLocation();
 	}
@@ -425,6 +448,21 @@ public class SessionPanel extends JPanel {
 	
 	public boolean isTestCors() {
 		return testCors.isSelected();
+	}
+
+	public KerberosConfig getKerberosConfig() {
+		kerberosConfig.setEnabled(kerberosSession.isSelected());
+		return kerberosConfig;
+	}
+
+	public void setKerberosConfig(KerberosConfig kerberosConfig) {
+		this.kerberosConfig = (kerberosConfig == null) ? new KerberosConfig() : kerberosConfig;
+		kerberosSession.setSelected(this.kerberosConfig.isEnabled());
+		updateGui();
+	}
+
+	public boolean isKerberosSession() {
+		return kerberosSession.isSelected();
 	}
 	
 	public void setRestrictToScope(boolean restrictToScope) {

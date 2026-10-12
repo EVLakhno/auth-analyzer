@@ -13,6 +13,7 @@ import java.util.HashMap;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.protect7.authanalyzer.gui.entity.StatusPanel;
+import com.protect7.authanalyzer.util.KerberosTokenMinter;
 
 public class Session {
 
@@ -29,10 +30,12 @@ public class Session {
 	private final HashMap<Integer, AnalyzerRequestResponse> requestResponseMap = new HashMap<>();
 	private ArrayList<Token> tokens = new ArrayList<Token>();
 	private ArrayList<MatchAndReplace> matchAndReplaceList = new ArrayList<MatchAndReplace>();
+	private KerberosConfig kerberosConfig = new KerberosConfig();
+	private transient KerberosTokenMinter kerberosMinter;
 	private final StatusPanel statusPanel;
 
-	public Session(String name, String headersToReplace, boolean removeHeaders, String headersToRemove, boolean filterRequestsWithSameHeader, boolean restrictToScope, 
-			URL scopeUrl, boolean testCors, ArrayList<Token> tokens, ArrayList<MatchAndReplace> matchAndReplaceList, StatusPanel statusPanel) {
+	public Session(String name, String headersToReplace, boolean removeHeaders, String headersToRemove, boolean filterRequestsWithSameHeader, boolean restrictToScope,
+			URL scopeUrl, boolean testCors, ArrayList<Token> tokens, ArrayList<MatchAndReplace> matchAndReplaceList, KerberosConfig kerberosConfig, StatusPanel statusPanel) {
 		this.name = name;
 		this.removeHeaders = removeHeaders;
 		this.headersToReplace = headersToReplace;
@@ -43,6 +46,7 @@ public class Session {
 		this.setScopeUrl(scopeUrl);
 		this.setTokens(tokens);
 		this.matchAndReplaceList = matchAndReplaceList;
+		this.setKerberosConfig(kerberosConfig);
 		this.statusPanel = statusPanel;
 	}
 
@@ -192,5 +196,29 @@ public class Session {
 	
 	public void setMatchAndReplaceList(ArrayList<MatchAndReplace> matchAndReplaceList) {
 		this.matchAndReplaceList = matchAndReplaceList;
+	}
+
+	public KerberosConfig getKerberosConfig() {
+		return kerberosConfig;
+	}
+
+	public void setKerberosConfig(KerberosConfig kerberosConfig) {
+		this.kerberosConfig = (kerberosConfig == null) ? new KerberosConfig() : kerberosConfig;
+		// Drop the cached minter so it is rebuilt with the new configuration.
+		this.kerberosMinter = null;
+	}
+
+	/**
+	 * Lazily builds (and caches) the token minter for this session. Returns
+	 * {@code null} if Kerberos is not enabled for the session.
+	 */
+	public KerberosTokenMinter getKerberosMinter() {
+		if (kerberosConfig == null || !kerberosConfig.isEnabled()) {
+			return null;
+		}
+		if (kerberosMinter == null) {
+			kerberosMinter = new KerberosTokenMinter(kerberosConfig);
+		}
+		return kerberosMinter;
 	}
 }

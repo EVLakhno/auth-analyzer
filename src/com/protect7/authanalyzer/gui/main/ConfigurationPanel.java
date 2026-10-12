@@ -32,6 +32,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.protect7.authanalyzer.entities.AutoExtractLocation;
 import com.protect7.authanalyzer.entities.FromToExtractLocation;
+import com.protect7.authanalyzer.entities.KerberosConfig;
 import com.protect7.authanalyzer.entities.MatchAndReplace;
 import com.protect7.authanalyzer.entities.Session;
 import com.protect7.authanalyzer.entities.Token;
@@ -376,6 +377,7 @@ public class ConfigurationPanel extends JPanel {
 			sessionPanel.setRestrictToScopeText(sessionPanelToClone.getRestrictToScopeText());
 			sessionPanel.setTestCors(sessionPanelToClone.isTestCors());
 			sessionPanel.setMatchAndReplaceList(sessionPanelToClone.getMatchAndReplaceList());
+			sessionPanel.setKerberosConfig(sessionPanelToClone.getKerberosConfig().copy());
 			for (TokenPanel tokenPanel : sessionPanelToClone.getTokenPanelList()) {
 				TokenPanel newTokenPanel = sessionPanel.addToken(tokenPanel.getTokenName());
 				newTokenPanel.setTokenLocationSet(tokenPanel.getTokenLocationSet());
@@ -578,7 +580,8 @@ public class ConfigurationPanel extends JPanel {
 			if (sessionListChanged) {
 				newSession = new Session(session, sessionPanel.getHeadersToReplaceText(), sessionPanel.isRemoveHeaders(),
 						sessionPanel.getHeadersToRemoveText(), sessionPanel.isFilterRequestsWithSameHeader(), sessionPanel.isRestrictToScope(),
-						sessionPanel.getScopeUrl(), sessionPanel.isTestCors(), tokenList, sessionPanel.getMatchAndReplaceList(), sessionPanel.getStatusPanel());
+						sessionPanel.getScopeUrl(), sessionPanel.isTestCors(), tokenList, sessionPanel.getMatchAndReplaceList(),
+						sessionPanel.getKerberosConfig(), sessionPanel.getStatusPanel());
 				config.addSession(newSession);
 			} else {
 				newSession = config.getSessionByName(session);
@@ -590,6 +593,7 @@ public class ConfigurationPanel extends JPanel {
 				newSession.setScopeUrl(sessionPanel.getScopeUrl());
 				newSession.setTestCors(sessionPanel.isTestCors());
 				newSession.setMatchAndReplaceList(sessionPanel.getMatchAndReplaceList());
+				newSession.setKerberosConfig(sessionPanel.getKerberosConfig());
 				for (Token newToken : tokenList) {
 					for (Token oldToken : newSession.getTokens()) {
 						if (newToken.getName().equals(oldToken.getName())) {
@@ -637,6 +641,16 @@ public class ConfigurationPanel extends JPanel {
 			}
 			if (sessionObject.get("testCors") != null) {
 				sessionPanel.setTestCors(sessionObject.get("testCors").getAsBoolean());
+			}
+			if (sessionObject.get("kerberosConfig") != null) {
+				try {
+					KerberosConfig kerberosConfig = new Gson().fromJson(sessionObject.get("kerberosConfig"), KerberosConfig.class);
+					if (kerberosConfig != null) {
+						sessionPanel.setKerberosConfig(kerberosConfig);
+					}
+				} catch (Exception e) {
+					BurpExtender.callbacks.printError("Cannot load Kerberos configuration for session " + sessionName);
+				}
 			}
 			if(sessionObject.get("matchAndReplaceList") != null) {
 				JsonArray matchAndReplaceArray = sessionObject.get("matchAndReplaceList").getAsJsonArray();

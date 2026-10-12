@@ -23,6 +23,7 @@
   * [Test CORS configuration](#test-cors-configuration)
   * [Test CSRF Check mechanism](#test-csrf-check-mechanism)
   * [Verify the Bypass Status](#verify-the-bypass-status)
+- [Kerberos Session (per-request Negotiate)](#kerberos-session-per-request-negotiate)
 - [Processing Filter](#processing-filter)
 - [Bypass Detection](#bypass-detection)
 - [Features](#features)
@@ -176,6 +177,38 @@ Expanded Diff view:
 
 ![Auth Analyzer](https://github.com/simioni87/auth_analyzer/blob/main/pics/diff_view.png)
 
+## Kerberos Session (per-request Negotiate)
+Some applications do not keep a session after the initial authentication but expect a **fresh Kerberos `Authorization: Negotiate ...` token on every single request** (pure per-request Negotiate / IWA). The standard "Header(s) to Replace" feature cannot cope with this: the Negotiate token is generated on the client side via GSS (an AP-REQ bound to a timestamp), it is never returned in a response (so Auto Extract can not catch it) and it is one-time (so a statically replaced token leads to a `401` on the second request).
+
+For these cases a session can be marked as a **Kerberos Session**. When enabled, Auth Analyzer mints a fresh `Authorization: Negotiate ...` token for the target host on every repeated request of that session, using the low privileged user's Kerberos credentials, and sets it on the outgoing request (overriding any static `Authorization` header).
+
+Applications where the server issues a `Set-Cookie` after the Negotiate handshake and then rides a cookie (not Negotiate) do **not** need this feature. There the normal static header replacement / auto extraction is sufficient.
+
+### Configuration
+Enable the `Kerberos Session` checkbox on a session and open `Kerberos Settings`:
+
+* **Credential source** - `Ticket cache (ccache)` or `Keytab`.
+  * *Ticket cache*: optional path to the ccache (leave empty to use the default, e.g. `KRB5CCNAME` or `/tmp/krb5cc_<uid>`). Obtain a ticket for the low privileged user beforehand with `kinit`.
+  * *Keytab*: path to the keytab file. A client principal (e.g. `lowpriv@EXAMPLE.COM`) is required.
+* **Client principal** - the user principal to authenticate as. Optional for a ccache, required for a keytab.
+* **Service principal (target)**:
+  * *Derive from target host* - builds a host based SPN `<service class>@<host>` (service class defaults to `HTTP`), where `<host>` is the host of each repeated request.
+  * *Fixed service principal name* - use a fixed SPN such as `HTTP/host.example.com@EXAMPLE.COM`.
+* **Token options**:
+  * *Wrap token in SPNEGO* - the default and the standard for HTTP Negotiate. Disable to send a raw Kerberos token.
+  * *Request mutual authentication* / *Request credential delegation* - optional GSS context flags.
+* **Kerberos environment (optional)** - override `krb5.conf` path, default realm and KDC host when no system wide configuration is present.
+* **Re-login interval (s)** - re-acquire the subject after this many seconds (a fresh token is still minted for every request). `0` re-acquires only after a failure.
+
+### :warning: Run Burp on a full JDK
+The JRE bundled with Burp Suite (2.x and later) has parts of the Kerberos stack removed, so Kerberos token minting will fail there. Start Burp on a full JDK instead, e.g.:
+
+```
+java -jar burpsuite.jar
+```
+
+This is the same limitation that affected the Berserko extension. If minting fails, the reason is printed to the extension's error output.
+
 ## Processing Filter
 The Auth Analyzer should process two types of requests / responses:
 
@@ -216,6 +249,7 @@ For instance, we don’t want to process a static JavaScript file because it is 
 *	Start / Stop / Pause the "Auth Analyzer"
 *	Pause each Session seperatly
 *	Restrict session to defined scope
+*	Kerberos Session: mint a fresh per-request `Authorization: Negotiate` token via GSS (ccache / keytab)
 *	Filter Requests with same header(s)
 * Drop Original Request functionality
 *	Detailed view of all processed Requests and Responses

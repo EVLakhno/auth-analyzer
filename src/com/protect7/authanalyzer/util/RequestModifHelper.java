@@ -18,12 +18,14 @@ import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonReader;
+import com.protect7.authanalyzer.entities.KerberosConfig;
 import com.protect7.authanalyzer.entities.MatchAndReplace;
 import com.protect7.authanalyzer.entities.Session;
 import com.protect7.authanalyzer.entities.Token;
 import com.protect7.authanalyzer.entities.TokenLocation;
 import com.protect7.authanalyzer.entities.TokenPriority;
 import burp.BurpExtender;
+import burp.IHttpService;
 import burp.IParameter;
 import burp.IRequestInfo;
 
@@ -71,6 +73,46 @@ public class RequestModifHelper {
 		return headers;
 	}
 	
+	/**
+	 * If the session is configured as a Kerberos session, mint a fresh
+	 * "Authorization: Negotiate ..." token for the target host and set (or add)
+	 * the Authorization header on the already modified header list. This runs
+	 * after {@link #getModifiedHeaders(List, Session)} so it overrides any static
+	 * Authorization replacement the user may have configured.
+	 */
+	public static void applyKerberosAuthorization(List<String> headers, Session session, IHttpService httpService) {
+		KerberosConfig config = session.getKerberosConfig();
+		if (config == null || !config.isEnabled()) {
+			return;
+		}
+		KerberosTokenMinter minter = session.getKerberosMinter();
+		if (minter == null) {
+			return;
+		}
+		String host = httpService == null ? null : httpService.getHost();
+		String authHeaderValue = minter.mintNegotiateHeader(host);
+		if (authHeaderValue == null) {
+			BurpExtender.callbacks.printError("[" + Globals.EXTENSION_NAME + "] Could not mint Kerberos 'Authorization: Negotiate' token for session '"
+					+ session.getName() + "' and host '" + host + "'. Reason: " + minter.getLastError()
+					+ ". Make sure Burp runs on a full JDK (not the bundled JRE) and that the configured credentials are valid.");
+			return;
+		}
+		setOrReplaceHeader(headers, "Authorization", authHeaderValue);
+	}
+
+	private static void setOrReplaceHeader(List<String> headers, String headerName, String headerValue) {
+		String fullHeader = headerName + ": " + headerValue;
+		// Index 0 is the request line, skip it.
+		for (int i = 1; i < headers.size(); i++) {
+			int colonIndex = headers.get(i).indexOf(":");
+			if (colonIndex != -1 && headers.get(i).substring(0, colonIndex).trim().equalsIgnoreCase(headerName)) {
+				headers.set(i, fullHeader);
+				return;
+			}
+		}
+		headers.add(fullHeader);
+	}
+
 	private static void replaceParamInPath(List<String> headers, Session session) {
 		int paramIndex = headers.get(0).indexOf("?");
 		String pathHeader;

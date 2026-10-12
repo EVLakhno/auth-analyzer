@@ -92,6 +92,7 @@ public class CenterPanel extends JPanel {
 	private final JCheckBox showPotentialBypassed = new JCheckBox("Status " + BypassConstants.SIMILAR.getName(), true);
 	private final JCheckBox showNotBypassed = new JCheckBox("Status " + BypassConstants.DIFFERENT.getName(), true);
 	private final JCheckBox showNA = new JCheckBox("Status " + BypassConstants.NA.getName(), true);
+	private final JCheckBox showIdorOnly = new JCheckBox("IDOR candidates (requests with an object reference)", false);
 	private final PlaceholderTextField filterText;
 	private final JPanel topPanel = new JPanel(new BorderLayout());
 	private final JLabel tableFilterInfoLabel = new JLabel("", SwingConstants.CENTER);
@@ -518,8 +519,8 @@ public class CenterPanel extends JPanel {
 		tableModel = new RequestTableModel();
 		table.setModel(tableModel);
 		config.setTableModel(tableModel);
-		sorter = new CustomRowSorter(this, tableModel, showOnlyMarked, showDuplicates, showBypassed, 
-				showPotentialBypassed, showNotBypassed, showNA, filterText, searchInPath, searchInRequest, searchInResponse, negativeSearch);
+		sorter = new CustomRowSorter(this, tableModel, showOnlyMarked, showDuplicates, showBypassed,
+				showPotentialBypassed, showNotBypassed, showNA, showIdorOnly, filterText, searchInPath, searchInRequest, searchInResponse, negativeSearch);
 		sorter.addRowSorterListener(new RowSorterListener() {
 			@Override
 			public void sorterChanged(RowSorterEvent e) {
@@ -722,7 +723,18 @@ public class CenterPanel extends JPanel {
 		inputPanel.add(showPotentialBypassed);
 		inputPanel.add(showNotBypassed);
 		inputPanel.add(showNA);
-		
+
+		inputPanel.add(new JLabel(" "));
+		inputPanel.add(new JSeparator(SwingConstants.HORIZONTAL));
+		inputPanel.add(new JLabel(" "));
+		inputPanel.add(new JLabel("IDOR / BOLA"));
+		inputPanel.add(showIdorOnly);
+		JLabel idorHint = new JLabel("<html><i>Shows only requests carrying an object reference (id in path/query/body,"
+				+ " UUID, ObjectId). Combine with Status " + BypassConstants.SAME.getName() + " / "
+				+ BypassConstants.SIMILAR.getName() + " for the IDOR shortlist. Hover a row to see the reference.</i></html>");
+		idorHint.putClientProperty("html.disable", null);
+		inputPanel.add(idorHint);
+
 		inputPanel.add(new JLabel(" "));
 		inputPanel.add(new JSeparator(SwingConstants.HORIZONTAL));
 		inputPanel.add(new JLabel(" "));

@@ -3,6 +3,7 @@ package com.protect7.authanalyzer.gui.util;
 import java.awt.Color;
 import java.awt.Component;
 
+import javax.swing.JComponent;
 import javax.swing.JTable;
 import javax.swing.table.DefaultTableCellRenderer;
 
@@ -12,12 +13,25 @@ import com.protect7.authanalyzer.util.BypassConstants;
 public class BypassCellRenderer extends DefaultTableCellRenderer {
 
 	private static final long serialVersionUID = 1L;
-	
+
 
 	@Override
 	public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
 			int row, int column) {
 		Component c = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
+		// Tooltip: show the detected object reference (candidate IDOR identifier), if any.
+		if (c instanceof JComponent) {
+			String tooltip = null;
+			try {
+				RequestTableModel model = (RequestTableModel) table.getModel();
+				OriginalRequestResponse rr = model.getOriginalRequestResponse(table.convertRowIndexToModel(row));
+				if (rr != null && rr.hasObjectReference()) {
+					tooltip = "Object reference: " + rr.getObjectReference();
+				}
+			} catch (Exception ignored) {
+			}
+			((JComponent) c).setToolTipText(tooltip);
+		}
 		if (value instanceof BypassConstants && !value.toString().equals(BypassConstants.NA.toString())) {
 			BypassConstants bypassConstant = (BypassConstants) value;
 			if (bypassConstant == BypassConstants.SAME) {

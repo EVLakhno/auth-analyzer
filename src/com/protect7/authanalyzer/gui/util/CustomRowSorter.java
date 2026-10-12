@@ -15,8 +15,8 @@ import com.protect7.authanalyzer.util.CurrentConfig;
 
 public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 	
-	public CustomRowSorter(CenterPanel centerPanel, RequestTableModel tableModel, JCheckBox showOnlyMarked, JCheckBox showDuplicates, JCheckBox showBypassed, 
-			JCheckBox showPotentialBypassed, JCheckBox showNotBypassed, JCheckBox showNA, PlaceholderTextField filterText,
+	public CustomRowSorter(CenterPanel centerPanel, RequestTableModel tableModel, JCheckBox showOnlyMarked, JCheckBox showDuplicates, JCheckBox showBypassed,
+			JCheckBox showPotentialBypassed, JCheckBox showNotBypassed, JCheckBox showNA, JCheckBox showIdorOnly, PlaceholderTextField filterText,
 			JCheckBox searchInPath, JCheckBox searchInRequest, JCheckBox searchInResponse, JCheckBox negativeSearch) {
 		super(tableModel);
 		showOnlyMarked.addActionListener(e -> tableModel.fireTableDataChanged());
@@ -25,6 +25,7 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 		showPotentialBypassed.addActionListener(e -> tableModel.fireTableDataChanged());
 		showNotBypassed.addActionListener(e -> tableModel.fireTableDataChanged());
 		showNA.addActionListener(e -> tableModel.fireTableDataChanged());
+		showIdorOnly.addActionListener(e -> tableModel.fireTableDataChanged());
 		filterText.addActionListener(e -> tableModel.fireTableDataChanged());
 		setMaxSortKeys(1);
         setSortKeys(Collections.singletonList(new RowSorter.SortKey(0, SortOrder.DESCENDING)));
@@ -92,9 +93,17 @@ public class CustomRowSorter extends TableRowSorter<RequestTableModel> {
 					}
 				}
 				if(!showDuplicates.isSelected()) {
-					String endpoint = entry.getStringValue(1).toString() + entry.getStringValue(2).toString() 
-							+ entry.getStringValue(3).toString();	
+					String endpoint = entry.getStringValue(1).toString() + entry.getStringValue(2).toString()
+							+ entry.getStringValue(3).toString();
 					if(tableModel.isDuplicate(Integer.parseInt(entry.getStringValue(0)), endpoint)) {
+						return false;
+					}
+				}
+				// IDOR gate: keep only requests that carry an object reference. Composes with the status
+				// filters below, so enabling it together with Status SAME / SIMILAR yields the IDOR shortlist.
+				if(showIdorOnly.isSelected()) {
+					OriginalRequestResponse requestResponse = tableModel.getOriginalRequestResponseById(Integer.parseInt(entry.getStringValue(0)));
+					if(requestResponse == null || !requestResponse.hasObjectReference()) {
 						return false;
 					}
 				}

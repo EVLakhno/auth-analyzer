@@ -24,6 +24,7 @@
   * [Test CSRF Check mechanism](#test-csrf-check-mechanism)
   * [Verify the Bypass Status](#verify-the-bypass-status)
 - [Kerberos Session (per-request Negotiate)](#kerberos-session-per-request-negotiate)
+- [IDOR / BOLA Hunting](#idor--bola-hunting)
 - [Processing Filter](#processing-filter)
 - [Bypass Detection](#bypass-detection)
 - [Features](#features)
@@ -230,6 +231,18 @@ java -jar burpsuite.jar
 
 This is the same limitation that affected the Berserko extension. If minting fails, the reason is printed to the extension's error output.
 
+## IDOR / BOLA Hunting
+When testing for Insecure Direct Object References (IDOR / BOLA), the interesting requests are the ones that carry an **object identifier** (a numeric id in the path, a UUID, a Mongo ObjectId, an `id` / `userId` / `orderId` parameter, ...) and where a lower privileged session still got the **same** or a **similar** response.
+
+Auth Analyzer detects object references automatically and lets you focus on them without adding clutter:
+
+* **IDOR candidates filter** - open the table filter dialog (funnel icon) and enable *IDOR candidates*. The table then shows only requests that carry an object reference. Combine it with *Status SAME* / *Status SIMILAR* (and untick the others) to get the IDOR shortlist in one step: requests with an identifier that the low privileged user could still access.
+* **Reference tooltip** - hover any row to see the detected reference, e.g. `Object reference: /users/1234, orderId=5567`.
+
+Detection is tuned for precision: numeric / UUID / ObjectId path segments, id-like parameter names (ending in `id` or from a curated set), and UUID / ObjectId values. Pagination, timing and anti-CSRF parameters are ignored, and static resources without an identifier are filtered out.
+
+Typical workflow: browse the application as a high privileged user, let Auth Analyzer replay every request as the low privileged session(s), then filter to *IDOR candidates* + *Status SAME* / *SIMILAR* and review that short list.
+
 ## Processing Filter
 The Auth Analyzer should process two types of requests / responses:
 
@@ -270,7 +283,9 @@ For instance, we don’t want to process a static JavaScript file because it is 
 *	Start / Stop / Pause the "Auth Analyzer"
 *	Pause each Session seperatly
 *	Restrict session to defined scope
-*	Kerberos Session: mint a fresh per-request `Authorization: Negotiate` token via GSS (ccache / keytab)
+*	Kerberos Session: mint a fresh per-request `Authorization: Negotiate` token via GSS (password / ccache / keytab)
+*	NTLM Session: per-request NTLMv2 handshake for a low privileged user
+*	IDOR / BOLA helper: detect object references and filter the table to IDOR candidates
 *	Filter Requests with same header(s)
 * Drop Original Request functionality
 *	Detailed view of all processed Requests and Responses

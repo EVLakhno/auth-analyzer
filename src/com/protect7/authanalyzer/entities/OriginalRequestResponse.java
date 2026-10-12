@@ -1,9 +1,11 @@
 package com.protect7.authanalyzer.entities;
 
+import com.protect7.authanalyzer.util.ObjectReferenceDetector;
+
 import burp.IHttpRequestResponse;
 
 public class OriginalRequestResponse implements Comparable<OriginalRequestResponse>{
-	
+
 	private final int id;
 	private final IHttpRequestResponse requestResponse;
 	private final String method;
@@ -14,6 +16,8 @@ public class OriginalRequestResponse implements Comparable<OriginalRequestRespon
 	private final int statusCode;
 	private final int responseContentLength;
 	private boolean marked = false;
+	private String objectReference = null;
+	private boolean objectReferenceComputed = false;
 	
 	public OriginalRequestResponse(int id, IHttpRequestResponse requestResponse, String method,
 			String url, String infoText, int statusCode, int responseContentLength) {
@@ -69,5 +73,19 @@ public class OriginalRequestResponse implements Comparable<OriginalRequestRespon
 	}
 	public String getComment() {
 		return comment;
-	}		
+	}
+	/**
+	 * @return a short description of the detected object reference(s) (candidate
+	 *         IDOR identifier), computed once and cached. Empty if none.
+	 */
+	public String getObjectReference() {
+		if (!objectReferenceComputed) {
+			objectReference = ObjectReferenceDetector.describe(requestResponse == null ? null : requestResponse.getRequest());
+			objectReferenceComputed = true;
+		}
+		return objectReference;
+	}
+	public boolean hasObjectReference() {
+		return !getObjectReference().isEmpty();
+	}
 }

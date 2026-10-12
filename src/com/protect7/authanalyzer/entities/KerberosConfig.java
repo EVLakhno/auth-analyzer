@@ -43,6 +43,10 @@ public class KerberosConfig {
 	private boolean useSpnego = true;
 	private boolean requestMutualAuth = false;
 	private boolean requestCredDeleg = false;
+	// Send the repeated request over a fresh, dedicated connection (Connection: close), bypassing
+	// Burp's connection pool and Platform Authentication. Required for per-connection Negotiate (IIS /
+	// Windows Integrated Auth), where a pooled connection stays authenticated as the first identity.
+	private boolean directConnection = true;
 	// Optional overrides so the extension works without a system wide krb5.conf.
 	private String krb5ConfPath = "";
 	private String realm = "";
@@ -162,6 +166,14 @@ public class KerberosConfig {
 		this.requestCredDeleg = requestCredDeleg;
 	}
 
+	public boolean isDirectConnection() {
+		return directConnection;
+	}
+
+	public void setDirectConnection(boolean directConnection) {
+		this.directConnection = directConnection;
+	}
+
 	public String getKrb5ConfPath() {
 		return krb5ConfPath;
 	}
@@ -213,6 +225,7 @@ public class KerberosConfig {
 		copy.useSpnego = this.useSpnego;
 		copy.requestMutualAuth = this.requestMutualAuth;
 		copy.requestCredDeleg = this.requestCredDeleg;
+		copy.directConnection = this.directConnection;
 		copy.krb5ConfPath = this.krb5ConfPath;
 		copy.realm = this.realm;
 		copy.kdc = this.kdc;

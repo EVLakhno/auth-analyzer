@@ -14,12 +14,15 @@ import java.util.List;
 import com.protect7.authanalyzer.entities.AnalyzerRequestResponse;
 import com.protect7.authanalyzer.entities.OriginalRequestResponse;
 import com.protect7.authanalyzer.entities.Session;
+import com.protect7.authanalyzer.entities.SimpleHttpRequestResponse;
 import com.protect7.authanalyzer.entities.Token;
 import com.protect7.authanalyzer.entities.TokenPriority;
 import com.protect7.authanalyzer.util.BypassConstants;
 import com.protect7.authanalyzer.util.CurrentConfig;
+import com.protect7.authanalyzer.util.DirectHttpClient;
 import com.protect7.authanalyzer.util.ExtractionHelper;
 import com.protect7.authanalyzer.util.GenericHelper;
+import com.protect7.authanalyzer.util.Globals;
 import com.protect7.authanalyzer.util.RequestModifHelper;
 import burp.BurpExtender;
 import burp.IHttpRequestResponse;
@@ -78,11 +81,32 @@ public class RequestController {
 					List<String> modifiedHeaders = RequestModifHelper.getModifiedHeaders(modifiedRequestInfo.getHeaders(), session);
 					// Mint and inject a fresh Kerberos Negotiate token if the session is a Kerberos session.
 					RequestModifHelper.applyKerberosAuthorization(modifiedHeaders, session, originalRequestResponse.getHttpService());
-					byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
 
-					// Perform modified request
-					IHttpRequestResponse sessionRequestResponse = BurpExtender.callbacks
-							.makeHttpRequest(originalRequestResponse.getHttpService(), message);
+					boolean kerberosDirect = session.getKerberosConfig() != null
+							&& session.getKerberosConfig().isEnabled()
+							&& session.getKerberosConfig().isDirectConnection();
+
+					IHttpRequestResponse sessionRequestResponse;
+					if (kerberosDirect) {
+						// Force a fresh connection so per-connection Negotiate (IIS / Windows Integrated Auth)
+						// is not masked by a pooled connection already authenticated as another identity
+						// (e.g. Burp Platform Authentication).
+						RequestModifHelper.setConnectionClose(modifiedHeaders);
+						byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
+						byte[] response = null;
+						try {
+							response = DirectHttpClient.send(originalRequestResponse.getHttpService(), message, 30000);
+						} catch (Exception e) {
+							BurpExtender.callbacks.printError("[" + Globals.EXTENSION_NAME + "] Direct Kerberos request failed for session '"
+									+ session.getName() + "': " + e.getMessage());
+						}
+						sessionRequestResponse = new SimpleHttpRequestResponse(originalRequestResponse.getHttpService(), message, response);
+					} else {
+						byte[] message = BurpExtender.callbacks.getHelpers().buildHttpMessage(modifiedHeaders, modifiedMessageBody);
+						// Perform modified request
+						sessionRequestResponse = BurpExtender.callbacks
+								.makeHttpRequest(originalRequestResponse.getHttpService(), message);
+					}
 				
 					// Analyze Response of modified Request
 					if (sessionRequestResponse.getRequest() != null && sessionRequestResponse.getResponse() != null) {

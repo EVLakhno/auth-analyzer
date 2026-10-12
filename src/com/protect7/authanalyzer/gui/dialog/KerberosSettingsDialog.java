@@ -70,6 +70,7 @@ public class KerberosSettingsDialog extends JDialog {
 	private final JCheckBox useSpnegoBox = new JCheckBox("Wrap token in SPNEGO (standard HTTP Negotiate)");
 	private final JCheckBox mutualAuthBox = new JCheckBox("Request mutual authentication");
 	private final JCheckBox credDelegBox = new JCheckBox("Request credential delegation");
+	private final JCheckBox directConnectionBox = new JCheckBox("Send over a fresh connection (bypass Burp pool / Platform Auth)");
 
 	private final JTextField reloginField = new JTextField(TEXTFIELD_WIDTH);
 
@@ -137,6 +138,10 @@ public class KerberosSettingsDialog extends JDialog {
 		addFullWidth(contentPanel, c, useSpnegoBox);
 		addFullWidth(contentPanel, c, mutualAuthBox);
 		addFullWidth(contentPanel, c, credDelegBox);
+		addFullWidth(contentPanel, c, directConnectionBox);
+		addFullWidth(contentPanel, c, createHintLabel("Keep this on for per-request / per-connection Negotiate (IIS, Windows Integrated Auth). "
+				+ "It opens a dedicated connection with 'Connection: close' so the minted token is the identity the server sees, "
+				+ "instead of reusing a pooled connection already authenticated by Burp Platform Authentication."));
 		addLabeledField(contentPanel, c, "Re-login interval (s)", reloginField,
 				"Re-acquire the subject after this many seconds (a fresh token is still minted per request). 0 = only on failure.");
 
@@ -257,6 +262,7 @@ public class KerberosSettingsDialog extends JDialog {
 		useSpnegoBox.setSelected(config.isUseSpnego());
 		mutualAuthBox.setSelected(config.isRequestMutualAuth());
 		credDelegBox.setSelected(config.isRequestCredDeleg());
+		directConnectionBox.setSelected(config.isDirectConnection());
 		reloginField.setText(String.valueOf(config.getReloginIntervalSeconds()));
 	}
 
@@ -314,6 +320,7 @@ public class KerberosSettingsDialog extends JDialog {
 		target.setUseSpnego(useSpnegoBox.isSelected());
 		target.setRequestMutualAuth(mutualAuthBox.isSelected());
 		target.setRequestCredDeleg(credDelegBox.isSelected());
+		target.setDirectConnection(directConnectionBox.isSelected());
 		target.setReloginIntervalSeconds(reloginInterval);
 		return true;
 	}

@@ -100,6 +100,25 @@ public class RequestModifHelper {
 		setOrReplaceHeader(headers, "Authorization", authHeaderValue);
 	}
 
+	/**
+	 * Forces the request onto a fresh, non-pooled connection by replacing any
+	 * keep-alive directives with "Connection: close". Used for Kerberos sessions
+	 * sent over a direct connection.
+	 */
+	public static void setConnectionClose(List<String> headers) {
+		// Drop any Proxy-Connection / Keep-Alive headers that could keep the socket open.
+		for (int i = headers.size() - 1; i >= 1; i--) {
+			int colonIndex = headers.get(i).indexOf(":");
+			if (colonIndex != -1) {
+				String key = headers.get(i).substring(0, colonIndex).trim();
+				if (key.equalsIgnoreCase("Proxy-Connection") || key.equalsIgnoreCase("Keep-Alive")) {
+					headers.remove(i);
+				}
+			}
+		}
+		setOrReplaceHeader(headers, "Connection", "close");
+	}
+
 	private static void setOrReplaceHeader(List<String> headers, String headerName, String headerValue) {
 		String fullHeader = headerName + ": " + headerValue;
 		// Index 0 is the request line, skip it.

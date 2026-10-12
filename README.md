@@ -203,7 +203,15 @@ Enable the `Kerberos Session` checkbox on a session and open `Kerberos Settings`
 * **Token options**:
   * *Wrap token in SPNEGO* - the default and the standard for HTTP Negotiate. Disable to send a raw Kerberos token.
   * *Request mutual authentication* / *Request credential delegation* - optional GSS context flags.
+* **Send over a fresh connection** - keep this enabled for per-request / per-connection Negotiate (IIS, Windows Integrated Authentication). See the note below.
 * **Re-login interval (s)** - re-acquire the subject after this many seconds (a fresh token is still minted for every request). `0` re-acquires only after a failure.
+
+### Per-connection Negotiate and Burp Platform Authentication
+With Windows Integrated Authentication the Negotiate handshake authenticates the **TCP connection**, not just the single request. Once a keep-alive connection is authenticated as one identity, the server answers every further request on that connection as that identity and ignores a different `Authorization` header. So if Burp's **Platform Authentication** (or a Kerberos auth extension) keeps a pooled connection authenticated as the high privileged user, the repeated low privileged request sent over that pooled connection comes back as the high privileged user, and every result looks the same.
+
+To avoid this, a Kerberos session sends its repeated request over a **fresh, dedicated connection** with `Connection: close` (the *Send over a fresh connection* option, on by default). This bypasses Burp's connection pool and Platform Authentication, so the minted low privileged token is the identity the server actually sees. The request is sent directly by the extension; TLS certificates are not validated, matching Burp's own interception behaviour.
+
+If you still see every session answered as the same user, make sure this option is enabled and that Burp Platform Authentication is not forcing credentials onto the target host.
 
 ### :warning: Run Burp on a full JDK
 The JRE bundled with Burp Suite (2.x and later) has parts of the Kerberos stack removed, so Kerberos token minting will fail there. Start Burp on a full JDK instead, e.g.:

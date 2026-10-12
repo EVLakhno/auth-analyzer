@@ -17,11 +17,16 @@ package com.protect7.authanalyzer.entities;
 public class KerberosConfig {
 
 	public enum CredentialSource {
-		CCACHE, KEYTAB
+		PASSWORD, CCACHE, KEYTAB
 	}
 
 	private boolean enabled = false;
-	private CredentialSource credentialSource = CredentialSource.CCACHE;
+	private CredentialSource credentialSource = CredentialSource.PASSWORD;
+	// Username / password (credentialSource == PASSWORD). The realm is taken from the domain / krb5 settings.
+	private String username = "";
+	private String password = "";
+	// Persist the password in the Burp configuration. When false the password is kept in memory only.
+	private boolean savePassword = false;
 	// Path to the Kerberos credential cache (ccache) when credentialSource == CCACHE
 	private String ccachePath = "";
 	// Path to the keytab file when credentialSource == KEYTAB
@@ -54,11 +59,35 @@ public class KerberosConfig {
 	}
 
 	public CredentialSource getCredentialSource() {
-		return credentialSource == null ? CredentialSource.CCACHE : credentialSource;
+		return credentialSource == null ? CredentialSource.PASSWORD : credentialSource;
 	}
 
 	public void setCredentialSource(CredentialSource credentialSource) {
 		this.credentialSource = credentialSource;
+	}
+
+	public String getUsername() {
+		return username;
+	}
+
+	public void setUsername(String username) {
+		this.username = username;
+	}
+
+	public String getPassword() {
+		return password;
+	}
+
+	public void setPassword(String password) {
+		this.password = password;
+	}
+
+	public boolean isSavePassword() {
+		return savePassword;
+	}
+
+	public void setSavePassword(boolean savePassword) {
+		this.savePassword = savePassword;
 	}
 
 	public String getCcachePath() {
@@ -172,6 +201,9 @@ public class KerberosConfig {
 		KerberosConfig copy = new KerberosConfig();
 		copy.enabled = this.enabled;
 		copy.credentialSource = this.getCredentialSource();
+		copy.username = this.username;
+		copy.password = this.password;
+		copy.savePassword = this.savePassword;
 		copy.ccachePath = this.ccachePath;
 		copy.keytabPath = this.keytabPath;
 		copy.principal = this.principal;

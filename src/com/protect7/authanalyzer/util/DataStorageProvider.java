@@ -26,6 +26,15 @@ public class DataStorageProvider {
 			String sessionJsonAsString = gson.toJson(session);
 			JsonObject sessionElement = JsonParser.parseString(sessionJsonAsString).getAsJsonObject();
 			sessionElement.addProperty("name", session.getName());
+			// Do not persist the Kerberos password unless the user opted in.
+			if (sessionElement.has("kerberosConfig") && sessionElement.get("kerberosConfig").isJsonObject()) {
+				JsonObject kerberosElement = sessionElement.getAsJsonObject("kerberosConfig");
+				boolean savePassword = kerberosElement.has("savePassword")
+						&& kerberosElement.get("savePassword").getAsBoolean();
+				if (!savePassword) {
+					kerberosElement.remove("password");
+				}
+			}
 			sessionArray.add(sessionElement);
 		}
 

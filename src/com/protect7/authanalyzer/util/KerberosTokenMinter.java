@@ -1,11 +1,18 @@
 package com.protect7.authanalyzer.util;
 
+import java.io.IOException;
+import java.security.Principal;
 import java.security.PrivilegedExceptionAction;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
 import javax.security.auth.Subject;
+import javax.security.auth.callback.Callback;
+import javax.security.auth.callback.CallbackHandler;
+import javax.security.auth.callback.NameCallback;
+import javax.security.auth.callback.PasswordCallback;
+import javax.security.auth.callback.UnsupportedCallbackException;
 import javax.security.auth.login.AppConfigurationEntry;
 import javax.security.auth.login.Configuration;
 import javax.security.auth.login.LoginContext;
@@ -113,12 +120,58 @@ public class KerberosTokenMinter {
 		long ttlMillis = (long) config.getReloginIntervalSeconds() * 1000L;
 		boolean stale = ttlMillis > 0 && (now - subjectAcquiredAt) > ttlMillis;
 		if (subject == null || stale) {
-			LoginContext loginContext = new LoginContext("AuthAnalyzerKerberos", null, null, buildConfiguration());
-			loginContext.login();
-			subject = loginContext.getSubject();
+			subject = doLogin();
 			subjectAcquiredAt = now;
 		}
 		return subject;
+	}
+
+	private Subject doLogin() throws Exception {
+		CallbackHandler handler = null;
+		if (config.getCredentialSource() == KerberosConfig.CredentialSource.PASSWORD) {
+			handler = buildCallbackHandler();
+		}
+		LoginContext loginContext = new LoginContext("AuthAnalyzerKerberos", null, handler, buildConfiguration());
+		loginContext.login();
+		return loginContext.getSubject();
+	}
+
+	/**
+	 * Attempts a login with the current configuration and returns a short
+	 * description of the acquired principal(s). Used by the "Test credentials"
+	 * button. Throws on failure.
+	 */
+	public synchronized String testLogin() throws Exception {
+		applySystemProperties();
+		invalidate();
+		Subject testSubject = doLogin();
+		StringBuilder builder = new StringBuilder();
+		for (Principal principal : testSubject.getPrincipals()) {
+			if (builder.length() > 0) {
+				builder.append(", ");
+			}
+			builder.append(principal.getName());
+		}
+		lastError = null;
+		return builder.length() == 0 ? "(login succeeded, no principal reported)" : builder.toString();
+	}
+
+	private CallbackHandler buildCallbackHandler() {
+		return new CallbackHandler() {
+			@Override
+			public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+				for (Callback callback : callbacks) {
+					if (callback instanceof NameCallback) {
+						((NameCallback) callback).setName(config.getUsername() == null ? "" : config.getUsername().trim());
+					} else if (callback instanceof PasswordCallback) {
+						String pw = config.getPassword() == null ? "" : config.getPassword();
+						((PasswordCallback) callback).setPassword(pw.toCharArray());
+					} else {
+						throw new UnsupportedCallbackException(callback, "Unsupported Kerberos callback");
+					}
+				}
+			}
+		};
 	}
 
 	private String resolveSpn(String host) {
@@ -142,21 +195,32 @@ public class KerberosTokenMinter {
 
 	private Configuration buildConfiguration() {
 		final Map<String, String> options = new HashMap<String, String>();
-		options.put("doNotPrompt", "true");
 		options.put("refreshKrb5Config", "true");
 		options.put("isInitiator", "true");
-		if (notEmpty(config.getPrincipal())) {
-			options.put("principal", config.getPrincipal().trim());
-		}
-		if (config.getCredentialSource() == KerberosConfig.CredentialSource.KEYTAB) {
+		KerberosConfig.CredentialSource source = config.getCredentialSource();
+		if (source == KerberosConfig.CredentialSource.PASSWORD) {
+			// Username / password: let the CallbackHandler supply the credentials.
+			options.put("doNotPrompt", "false");
+			if (notEmpty(config.getPrincipal())) {
+				options.put("principal", config.getPrincipal().trim());
+			}
+		} else if (source == KerberosConfig.CredentialSource.KEYTAB) {
+			options.put("doNotPrompt", "true");
 			options.put("useKeyTab", "true");
 			options.put("storeKey", "true");
+			if (notEmpty(config.getPrincipal())) {
+				options.put("principal", config.getPrincipal().trim());
+			}
 			if (notEmpty(config.getKeytabPath())) {
 				options.put("keyTab", config.getKeytabPath().trim());
 			}
 		} else {
+			options.put("doNotPrompt", "true");
 			options.put("useTicketCache", "true");
 			options.put("renewTGT", "true");
+			if (notEmpty(config.getPrincipal())) {
+				options.put("principal", config.getPrincipal().trim());
+			}
 			if (notEmpty(config.getCcachePath())) {
 				options.put("ticketCache", config.getCcachePath().trim());
 			}

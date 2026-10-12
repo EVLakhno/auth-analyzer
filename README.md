@@ -184,20 +184,25 @@ For these cases a session can be marked as a **Kerberos Session**. When enabled,
 
 Applications where the server issues a `Set-Cookie` after the Negotiate handshake and then rides a cookie (not Negotiate) do **not** need this feature. There the normal static header replacement / auto extraction is sufficient.
 
+### Several clients
+Each Auth Analyzer session is **one Kerberos client (one identity)**. To test several clients, create or clone a session per user (e.g. `user1`, `user2`, `admin`) and give each its own Kerberos credentials. This is the usual authorization-testing setup: browse as a high privileged user and let every session replay with its own low privileged Kerberos identity.
+
 ### Configuration
 Enable the `Kerberos Session` checkbox on a session and open `Kerberos Settings`:
 
-* **Credential source** - `Ticket cache (ccache)` or `Keytab`.
+* **Credential source** - `Username / password`, `Ticket cache (ccache)` or `Keytab`.
+  * *Username / password*: enter the user name (e.g. `lowpriv`, the realm comes from the domain settings, or a full `lowpriv@EXAMPLE.COM`) and the password. The TGT is obtained directly, no external `kinit` needed. `Save password in Burp config` controls whether the password is persisted; when unchecked it is kept in memory only.
   * *Ticket cache*: optional path to the ccache (leave empty to use the default, e.g. `KRB5CCNAME` or `/tmp/krb5cc_<uid>`). Obtain a ticket for the low privileged user beforehand with `kinit`.
   * *Keytab*: path to the keytab file. A client principal (e.g. `lowpriv@EXAMPLE.COM`) is required.
-* **Client principal** - the user principal to authenticate as. Optional for a ccache, required for a keytab.
+* **Test credentials** - attempts a login with the current settings and reports the acquired principal, so you can validate each client before running.
+* **Client principal** - the user principal to authenticate as. Required for a keytab, optional for a ccache / password.
+* **Domain settings** - `Domain / realm` (e.g. `EXAMPLE.COM`), `KDC host` and an optional `krb5.conf file`. These let the extension work without a system wide `krb5.conf`; a provided `krb5.conf` overrides them.
 * **Service principal (target)**:
   * *Derive from target host* - builds a host based SPN `<service class>@<host>` (service class defaults to `HTTP`), where `<host>` is the host of each repeated request.
   * *Fixed service principal name* - use a fixed SPN such as `HTTP/host.example.com@EXAMPLE.COM`.
 * **Token options**:
   * *Wrap token in SPNEGO* - the default and the standard for HTTP Negotiate. Disable to send a raw Kerberos token.
   * *Request mutual authentication* / *Request credential delegation* - optional GSS context flags.
-* **Kerberos environment (optional)** - override `krb5.conf` path, default realm and KDC host when no system wide configuration is present.
 * **Re-login interval (s)** - re-acquire the subject after this many seconds (a fresh token is still minted for every request). `0` re-acquires only after a failure.
 
 ### :warning: Run Burp on a full JDK

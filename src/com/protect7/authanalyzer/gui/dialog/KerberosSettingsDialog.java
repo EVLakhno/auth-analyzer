@@ -1,11 +1,14 @@
 package com.protect7.authanalyzer.gui.dialog;
 
-import java.awt.Dimension;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
@@ -30,7 +33,8 @@ import com.protect7.authanalyzer.gui.entity.SessionPanel;
 public class KerberosSettingsDialog extends JDialog {
 
 	private static final long serialVersionUID = 1L;
-	private final int TEXTFIELD_WIDTH = 32;
+	private final int TEXTFIELD_WIDTH = 30;
+	private final int HINT_WIDTH = 420;
 
 	private final KerberosConfig config;
 
@@ -123,6 +127,16 @@ public class KerberosSettingsDialog extends JDialog {
 		c.anchor = GridBagConstraints.CENTER;
 		contentPanel.add(buttonPanel, c);
 
+		// Filler so the whole form stays anchored to the top if the window is larger than needed.
+		c.gridx = 0;
+		c.gridy++;
+		c.gridwidth = 2;
+		c.weightx = 1;
+		c.weighty = 1;
+		c.fill = GridBagConstraints.BOTH;
+		c.anchor = GridBagConstraints.NORTHWEST;
+		contentPanel.add(Box.createGlue(), c);
+
 		loadFromConfig();
 		updateEnabledState();
 
@@ -146,14 +160,18 @@ public class KerberosSettingsDialog extends JDialog {
 	}
 
 	private void addSectionLabel(JPanel panel, GridBagConstraints c, String text) {
-		JLabel label = new JLabel(text);
-		label.setBorder(BorderFactory.createEmptyBorder(8, 0, 2, 0));
+		JLabel label = new JLabel("<html><b>" + text + "</b></html>");
+		label.putClientProperty("html.disable", null);
+		label.setBorder(BorderFactory.createEmptyBorder(10, 0, 2, 0));
+		c.gridwidth = 2;
 		c.gridx = 0;
 		c.gridy++;
 		panel.add(label, c);
+		c.gridwidth = 1;
 	}
 
-	private void addRow(JPanel panel, GridBagConstraints c, java.awt.Component left, java.awt.Component right) {
+	private void addRow(JPanel panel, GridBagConstraints c, Component left, Component right) {
+		c.gridwidth = 1;
 		c.gridx = 0;
 		c.gridy++;
 		panel.add(left, c);
@@ -162,28 +180,35 @@ public class KerberosSettingsDialog extends JDialog {
 	}
 
 	private void addLabeledField(JPanel panel, GridBagConstraints c, String label, JTextField field, String hint) {
+		c.gridwidth = 1;
 		c.gridx = 0;
 		c.gridy++;
 		panel.add(new JLabel(label), c);
 		c.gridx = 1;
 		panel.add(field, c);
 		if (hint != null) {
-			JLabel hintLabel = new JLabel("<html><i>" + hint + "</i></html>");
-			hintLabel.putClientProperty("html.disable", null);
-			hintLabel.setPreferredSize(new Dimension(360, hintLabel.getPreferredSize().height));
 			c.gridx = 1;
 			c.gridy++;
-			panel.add(hintLabel, c);
+			panel.add(createHintLabel(hint), c);
 		}
 	}
 
-	private void addFullWidth(JPanel panel, GridBagConstraints c, java.awt.Component component) {
-		int previousWidth = c.gridwidth;
+	private void addFullWidth(JPanel panel, GridBagConstraints c, Component component) {
 		c.gridwidth = 2;
 		c.gridx = 0;
 		c.gridy++;
 		panel.add(component, c);
-		c.gridwidth = previousWidth;
+		c.gridwidth = 1;
+	}
+
+	private JLabel createHintLabel(String hint) {
+		// Fixed width div so the HTML label reports a correct multi-line height and does not overlap the next row.
+		JLabel hintLabel = new JLabel("<html><div style='width:" + HINT_WIDTH + "px;'>" + hint + "</div></html>");
+		hintLabel.putClientProperty("html.disable", null);
+		hintLabel.setForeground(Color.GRAY);
+		hintLabel.setFont(hintLabel.getFont().deriveFont(Font.ITALIC, hintLabel.getFont().getSize2D() - 1f));
+		hintLabel.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+		return hintLabel;
 	}
 
 	private void loadFromConfig() {

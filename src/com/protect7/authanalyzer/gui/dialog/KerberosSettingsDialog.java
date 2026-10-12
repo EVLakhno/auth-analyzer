@@ -119,10 +119,12 @@ public class KerberosSettingsDialog extends JDialog {
 		addFullWidth(contentPanel, c, testCredentialsButton);
 
 		addSectionLabel(contentPanel, c, "Domain settings");
-		addLabeledField(contentPanel, c, "Domain / realm", realmField, "Kerberos realm, usually upper case, e.g. EXAMPLE.COM");
+		addLabeledField(contentPanel, c, "Domain / realm", realmField,
+				"AD domain or Kerberos realm, e.g. EXAMPLE.COM (entering example.com is fine, it is upper-cased for the realm).");
 		addLabeledField(contentPanel, c, "KDC host", kdcField, "Domain controller / KDC host, e.g. dc01.example.com");
 		addLabeledField(contentPanel, c, "krb5.conf file", krb5ConfField,
-				"Optional. Leave empty to use the system / default krb5.conf. Overrides domain / realm / KDC above.");
+				"Optional. When Domain/realm and KDC are set, a minimal krb5.conf is generated automatically. "
+				+ "Provide a path only to use your own krb5.conf (it then overrides Domain/realm and KDC above).");
 
 		addSectionLabel(contentPanel, c, "Service principal (target)");
 		addFullWidth(contentPanel, c, deriveSpnRadio);

@@ -1,6 +1,11 @@
 package com.protect7.authanalyzer.util;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.security.PrivilegedExceptionAction;
 import java.util.Base64;
@@ -57,6 +62,8 @@ public class KerberosTokenMinter {
 	private Subject subject = null;
 	private long subjectAcquiredAt = 0;
 	private volatile String lastError = null;
+	private String generatedKrb5ConfPath = null;
+	private String generatedKrb5ConfSignature = null;
 
 	public KerberosTokenMinter(KerberosConfig config) {
 		this.config = config;
@@ -181,16 +188,73 @@ public class KerberosTokenMinter {
 		return config.getServicePrincipalName();
 	}
 
-	private void applySystemProperties() {
+	private void applySystemProperties() throws IOException {
+		String confPath = null;
 		if (notEmpty(config.getKrb5ConfPath())) {
-			System.setProperty("java.security.krb5.conf", config.getKrb5ConfPath().trim());
+			// Explicit krb5.conf supplied by the user.
+			confPath = config.getKrb5ConfPath().trim();
+		} else if (notEmpty(config.getRealm()) && notEmpty(config.getKdc())) {
+			// No krb5.conf but a realm and KDC are given: generate a minimal, valid krb5.conf.
+			// This is more reliable than the java.security.krb5.realm/kdc shortcut properties
+			// (which can collide with a krb5.conf left over from another extension and cause
+			// "krb5.conf loading failed").
+			confPath = ensureGeneratedKrb5Conf(config.getRealm().trim(), config.getKdc().trim());
 		}
-		if (notEmpty(config.getRealm())) {
-			System.setProperty("java.security.krb5.realm", config.getRealm().trim());
+		if (confPath != null) {
+			System.setProperty("java.security.krb5.conf", confPath);
+			// Avoid the realm/kdc shortcut properties conflicting with the conf file.
+			System.clearProperty("java.security.krb5.realm");
+			System.clearProperty("java.security.krb5.kdc");
+		} else {
+			if (notEmpty(config.getRealm())) {
+				System.setProperty("java.security.krb5.realm", config.getRealm().trim().toUpperCase());
+			}
+			if (notEmpty(config.getKdc())) {
+				System.setProperty("java.security.krb5.kdc", config.getKdc().trim());
+			}
 		}
-		if (notEmpty(config.getKdc())) {
-			System.setProperty("java.security.krb5.kdc", config.getKdc().trim());
+	}
+
+	private String ensureGeneratedKrb5Conf(String realmInput, String kdc) throws IOException {
+		String realm = realmInput.toUpperCase();
+		String dnsDomain = realmInput.toLowerCase();
+		String signature = realm + "|" + kdc;
+		if (signature.equals(generatedKrb5ConfSignature) && generatedKrb5ConfPath != null
+				&& new File(generatedKrb5ConfPath).exists()) {
+			return generatedKrb5ConfPath;
 		}
+		String content = buildKrb5ConfContent(realm, dnsDomain, kdc);
+		File file = File.createTempFile("authanalyzer-krb5", ".conf");
+		file.deleteOnExit();
+		Writer writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
+		try {
+			writer.write(content);
+		} finally {
+			writer.close();
+		}
+		generatedKrb5ConfPath = file.getAbsolutePath();
+		generatedKrb5ConfSignature = signature;
+		BurpExtender.callbacks.printOutput("[" + Globals.EXTENSION_NAME + "] Generated krb5.conf at " + generatedKrb5ConfPath
+				+ " (realm=" + realm + ", kdc=" + kdc + ")");
+		return generatedKrb5ConfPath;
+	}
+
+	private static String buildKrb5ConfContent(String realm, String dnsDomain, String kdc) {
+		StringBuilder sb = new StringBuilder();
+		sb.append("[libdefaults]\n");
+		sb.append("    default_realm = ").append(realm).append("\n");
+		sb.append("    dns_lookup_kdc = false\n");
+		sb.append("    dns_lookup_realm = false\n");
+		sb.append("    udp_preference_limit = 1\n");
+		sb.append("    forwardable = true\n");
+		sb.append("\n[realms]\n");
+		sb.append("    ").append(realm).append(" = {\n");
+		sb.append("        kdc = ").append(kdc).append("\n");
+		sb.append("    }\n");
+		sb.append("\n[domain_realm]\n");
+		sb.append("    .").append(dnsDomain).append(" = ").append(realm).append("\n");
+		sb.append("    ").append(dnsDomain).append(" = ").append(realm).append("\n");
+		return sb.toString();
 	}
 
 	private Configuration buildConfiguration() {
